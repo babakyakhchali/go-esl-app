@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/0x19/goesl"
 	"github.com/google/uuid"
 )
 
@@ -34,7 +35,7 @@ func (s *Session) hangup(cause ...string) (IEvent, error) {
 	return s.exec("hangup", c)
 }
 func (s *Session) playback(path string) (IEvent, error) {
-	return s.exec("answer", path)
+	return s.exec("playback", path)
 }
 
 //FsConnector acts as a channel between fs and session
@@ -62,10 +63,9 @@ func (fs *FsConnector) exec(app string, args string) (IEvent, error) {
 	}
 	headers := make(map[string]string)
 	headers["call-command"] = "execute"
-	headers["execute-app-name"] = "execute"
-	headers["execute-app-arg"] = "execute"
+	headers["execute-app-name"] = app
+	headers["execute-app-arg"] = args
 	headers["Event-UUID"] = uuid.New().String()
-	headers["execute-app-name"] = "execute"
 
 	fs.cmds <- headers
 	for {
@@ -98,4 +98,29 @@ type SessionManager struct {
 //IEslApp all call handler apps must implement this
 type IEslApp interface {
 	run()
+}
+
+func eslSessionHandler(msg *goesl.Message, esl *goesl.Client) {
+	s := Session{
+		FsConnector: FsConnector{
+			uuid:   msg.GetHeader("Unique-ID"),
+			cmds:   make(chan map[string]string),
+			events: make(chan IEvent),
+			errors: make(chan error),
+			closed: false,
+		},
+	}
+	sessions[s.uuid] = &s
+	app := MyApp{
+		session: &s,
+	}
+	go app.run()
+	for {
+		cmd, more := <-s.cmds
+		if !more {
+			break
+		}
+		esl.SendMsg(cmd, s.uuid, "")
+	}
+	goesl.Debug("session ended:%s", s.uuid)
 }

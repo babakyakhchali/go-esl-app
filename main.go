@@ -6,31 +6,6 @@ import (
 	"github.com/0x19/goesl"
 )
 
-func sessionHandler(msg *goesl.Message, esl *goesl.Client) {
-	s := Session{
-		FsConnector: FsConnector{
-			uuid:   msg.GetHeader("Unique-ID"),
-			cmds:   make(chan map[string]string),
-			events: make(chan IEvent),
-			errors: make(chan error),
-			closed: false,
-		},
-	}
-	sessions[s.uuid] = &s
-	app := MyApp{
-		session: &s,
-	}
-	go app.run()
-	for {
-		cmd, more := <-s.cmds
-		if !more {
-			break
-		}
-		esl.SendMsg(cmd, s.uuid, "")
-	}
-	goesl.Debug("session ended:%s", s.uuid)
-}
-
 var (
 	sessions = map[string]*Session{}
 )
@@ -62,7 +37,7 @@ func main() {
 		}
 		goesl.Debug("got event:%s(%s) uuid:%s", msg.GetHeader("Event-Name"), msg.GetHeader("Event-Subclass"), msg.GetHeader("Unique-ID"))
 		if msg.GetHeader("Event-Name") == "CHANNEL_PARK" {
-			go sessionHandler(msg, client)
+			go eslSessionHandler(msg, client)
 		} else if msg.GetHeader("Unique-ID") != "" {
 			s, r := sessions[msg.GetHeader("Unique-ID")]
 			if r {
