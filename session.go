@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/0x19/goesl"
 	"github.com/google/uuid"
@@ -13,6 +16,10 @@ type ISession interface {
 	answer() (IEvent, error)
 	hangup(cause ...string) (IEvent, error)
 	playback(path string) (IEvent, error)
+	playAndGetDigits(min uint, max uint, tries uint, timeout uint,
+		terminators string, file string, invalidFile string, varName string, regexp string, digitTimeout uint,
+		transferOnFailure string) (IEvent, error)
+	playAndGetOneDigit(path string) (uint64, error)
 }
 
 //Session main object to interact with a call
@@ -36,6 +43,23 @@ func (s *Session) hangup(cause ...string) (IEvent, error) {
 }
 func (s *Session) playback(path string) (IEvent, error) {
 	return s.exec("playback", path)
+}
+
+func (s *Session) playAndGetDigits(min uint, max uint, tries uint, timeout uint,
+	terminators string, file string, invalidFile string, varName string, regexp string, digitTimeout uint,
+	transferOnFailure string) (IEvent, error) {
+	args := fmt.Sprintf("%d %d %d %d %s %s %s %s %s %d %s",
+		min, max, tries, timeout, terminators, file, invalidFile, varName, regexp, digitTimeout, transferOnFailure)
+	return s.exec("play_and_get_digits", strings.TrimSpace(args))
+}
+
+func (s *Session) playAndGetOneDigit(path string) (uint64, error) {
+	varname := "pagd-" + strconv.FormatInt(time.Now().Unix(), 10)
+	r, e := s.playAndGetDigits(1, 1, 3, 5000, "#", path, "''", varname, "\\d", 5000, "''")
+	if e != nil {
+		return 0, e
+	}
+	return strconv.ParseUint(r.GetHeader("variable_"+varname), 10, 32)
 }
 
 //FsConnector acts as a channel between fs and session

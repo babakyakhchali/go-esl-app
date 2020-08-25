@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/0x19/goesl"
@@ -21,7 +22,7 @@ func main() {
 	goesl.Debug("Yuhu! New client: %q", client)
 	go client.Handle()
 
-	client.Send("events json ALL")
+	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY")
 	for {
 		msg, err := client.ReadMessage()
 		if err != nil {
@@ -35,15 +36,30 @@ func main() {
 			}
 			break
 		}
-		goesl.Debug("got event:%s(%s) uuid:%s", msg.GetHeader("Event-Name"), msg.GetHeader("Event-Subclass"), msg.GetHeader("Unique-ID"))
-		if msg.GetHeader("Event-Name") == "CHANNEL_PARK" {
+		eventName := msg.GetHeader("Event-Name")
+		eventSubclass := msg.GetHeader("Event-Subclass")
+		channelUUID := msg.GetHeader("Unique-ID")
+		goesl.Debug("got event:%s(%s) uuid:%s", eventName, eventSubclass, channelUUID)
+		if eventName == "CHANNEL_PARK" {
 			go eslSessionHandler(msg, client)
-		} else if msg.GetHeader("Unique-ID") != "" {
-			s, r := sessions[msg.GetHeader("Unique-ID")]
+		} else if channelUUID != "" {
+			s, r := sessions[channelUUID]
 			if r {
-				s.events <- msg
+				if eventName == "CHANNEL_DESTROY" {
+					delete(sessions, channelUUID)
+					fmt.Printf("deleted channel %s. remained channels:%d", channelUUID, len(sessions))
+					continue
+				}
+				select {
+				case s.events <- msg:
+					fmt.Printf("handled event %s for channel %s", msg.GetHeader("Event-Name"), msg.GetHeader("Unique-ID"))
+				default:
+					fmt.Printf("ignoring event %s for channel %s", msg.GetHeader("Event-Name"), msg.GetHeader("Unique-ID"))
+				}
+
 			}
 		}
-		goesl.Debug("%s", msg)
+		//goesl.Debug("%v", msg)
 	}
+	fmt.Printf("Application exitted")
 }
