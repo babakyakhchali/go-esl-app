@@ -1,20 +1,24 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	eslession "github.com/babakyakhchali/go-esl-wrapper/eslsession"
+)
 
 //MyApp simple test call handler application
 type MyApp struct {
-	session ISession
+	session eslession.ISession
 }
 
-func (app *MyApp) run() {
-	app.session.answer()
-	app.session.playback("conference\\8000\\conf-alone.wav")
-	i, e := app.session.playAndGetOneDigit("phrase:demo_ivr_main_menu")
+func (app *MyApp) Run() {
+	app.session.Answer()
+	app.session.Playback("conference\\8000\\conf-alone.wav")
+	i, e := app.session.PlayAndGetOneDigit("phrase:demo_ivr_sub_menu")
 	if e != nil {
 		fmt.Printf("error is:%v\n", e)
 	} else {
 		fmt.Printf("input is:%d\n", i)
 	}
-	app.session.hangup()
+	app.session.Hangup()
 }
