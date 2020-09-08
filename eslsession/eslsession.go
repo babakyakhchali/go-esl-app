@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0x19/goesl"
 	"github.com/google/uuid"
 )
 
@@ -124,6 +123,7 @@ func (fs *FsConnector) exec(app string, args string) (IEvent, error) {
 //IEvent is fs event
 type IEvent interface {
 	GetHeader(name string) string
+	GetBody() []byte
 }
 
 //SessionManager manages sessions
@@ -136,10 +136,17 @@ type IEslApp interface {
 	Run()
 }
 
+//IEsl common interface for freeswitch esl
+type IEsl interface {
+	Send(cmd string) error
+	SendMsg(cmd map[string]string, uuid string, data string) (IEvent, error)
+	ReadMessage() (IEvent, error)
+}
+
 //AppFactory signature for applications using this module
 type AppFactory func(s ISession) IEslApp
 
-func eslSessionHandler(msg *goesl.Message, esl *goesl.Client, f AppFactory) {
+func eslSessionHandler(msg IEvent, esl IEsl, f AppFactory) {
 	s := Session{
 		FsConnector: FsConnector{
 			uuid:   msg.GetHeader("Unique-ID"),
@@ -159,11 +166,11 @@ func eslSessionHandler(msg *goesl.Message, esl *goesl.Client, f AppFactory) {
 		}
 		esl.SendMsg(cmd, s.uuid, "")
 	}
-	goesl.Debug("session ended:%s", s.uuid)
+	fmt.Printf("session ended:%s", s.uuid)
 }
 
 //EslConnectionHandler handles incomming events
-func EslConnectionHandler(client *goesl.Client, factory AppFactory) {
+func EslConnectionHandler(client IEsl, factory AppFactory) {
 	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY")
 	for {
 		msg, err := client.ReadMessage()
@@ -171,7 +178,7 @@ func EslConnectionHandler(client *goesl.Client, factory AppFactory) {
 
 			// If it contains EOF, we really dont care...
 			if !strings.Contains(err.Error(), "EOF") && err.Error() != "unexpected end of JSON input" {
-				goesl.Error("Error while reading Freeswitch message: %s", err)
+				fmt.Printf("Error while reading Freeswitch message: %s", err)
 				continue
 			}
 			for _, v := range sessions {
@@ -182,7 +189,7 @@ func EslConnectionHandler(client *goesl.Client, factory AppFactory) {
 		eventName := msg.GetHeader("Event-Name")
 		eventSubclass := msg.GetHeader("Event-Subclass")
 		channelUUID := msg.GetHeader("Unique-ID")
-		goesl.Debug("got event:%s(%s) uuid:%s", eventName, eventSubclass, channelUUID)
+		fmt.Printf("got event:%s(%s) uuid:%s", eventName, eventSubclass, channelUUID)
 		if eventName == "CHANNEL_PARK" {
 			go eslSessionHandler(msg, client, factory)
 		} else if channelUUID != "" {
