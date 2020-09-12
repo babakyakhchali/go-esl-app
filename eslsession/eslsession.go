@@ -179,7 +179,6 @@ func EslConnectionHandler(client IEsl, factory AppFactory) {
 			// If it contains EOF, we really dont care...
 			if !strings.Contains(err.Error(), "EOF") && err.Error() != "unexpected end of JSON input" {
 				fmt.Printf("Error while reading Freeswitch message: %s", err)
-				continue
 			}
 			for _, v := range sessions {
 				v.errors <- err

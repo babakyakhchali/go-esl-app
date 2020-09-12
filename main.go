@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/0x19/goesl"
 	eslession "github.com/babakyakhchali/go-esl-wrapper/eslsession"
+	goesl "github.com/babakyakhchali/go-esl-wrapper/goesl"
 )
 
 func h(s eslession.ISession) eslession.IEslApp {

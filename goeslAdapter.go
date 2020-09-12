@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/0x19/goesl"
 	eslession "github.com/babakyakhchali/go-esl-wrapper/eslsession"
+	goesl "github.com/babakyakhchali/go-esl-wrapper/goesl"
 )
 
 //EslWrapper wrapper goesl Client to abstract goesl out of eslsession
