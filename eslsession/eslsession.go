@@ -159,11 +159,13 @@ type AppFactory func(s ISession) IEslApp
 func eslSessionHandler(msg IEvent, esl IEsl, f AppFactory) {
 	s := Session{
 		FsConnector: FsConnector{
-			uuid:   msg.GetHeader("Unique-ID"),
-			cmds:   make(chan map[string]string),
-			events: make(chan IEvent),
-			errors: make(chan error),
-			closed: false,
+			uuid:     msg.GetHeader("Unique-ID"),
+			cmds:     make(chan map[string]string),
+			appError: make(chan error),
+			appEvent: make(chan IEvent),
+			events:   make(chan IEvent),
+			errors:   make(chan error),
+			closed:   false,
 		},
 	}
 	sessions[s.uuid] = &s
