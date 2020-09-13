@@ -1,4 +1,4 @@
-package eslession
+package eslsession
 
 import (
 	"fmt"
@@ -6,11 +6,13 @@ import (
 	"strings"
 	"time"
 
+	l "github.com/babakyakhchali/go-esl-wrapper/logger"
 	"github.com/google/uuid"
 )
 
 var (
 	sessions = map[string]*Session{}
+	logger   = l.NewLogger("eslsession")
 )
 
 //ISession is fs call interface
@@ -75,21 +77,37 @@ func (s *Session) PlayAndGetOneDigit(path string) (uint64, error) {
 
 //FsConnector acts as a channel between fs and session
 type FsConnector struct {
-	uuid   string
-	cmds   chan map[string]string
-	events chan IEvent
-	errors chan error
-
-	result      chan string
-	resultError chan string
-
-	closed bool
+	uuid           string
+	cmds           chan map[string]string
+	events         chan IEvent
+	appEvent       chan IEvent
+	appError       chan error
+	errors         chan error
+	currentAppUUID string
+	closed         bool
 }
 
 var (
 	//EChannelHangup occurs when exec hits hangup
 	EChannelHangup = "ChannelHangup"
 )
+
+func (fs *FsConnector) dispatch() {
+	for {
+		select {
+		case event := <-fs.events:
+			ename := event.GetHeader("Event-Name")
+			logger.Debug("dispatch(): got event %s:%s", ename, fs.uuid)
+			euuid := event.GetHeader("Application-UUID")
+			if ename == "CHANNEL_EXECUTE_COMPLETE" && euuid == fs.currentAppUUID {
+				fs.appEvent <- event
+			}
+		case err := <-fs.errors:
+			fs.appError <- err
+		}
+	}
+
+}
 
 //Application-UUID Event-UUID
 func (fs *FsConnector) exec(app string, args string) (IEvent, error) {
@@ -101,23 +119,15 @@ func (fs *FsConnector) exec(app string, args string) (IEvent, error) {
 	headers["execute-app-name"] = app
 	headers["execute-app-arg"] = args
 	headers["Event-UUID"] = uuid.New().String()
-
+	fs.currentAppUUID = headers["Event-UUID"]
 	fs.cmds <- headers
-	for {
-		select {
-		case event := <-fs.events:
-			ename := event.GetHeader("Event-Name")
-			euuid := event.GetHeader("Application-UUID")
-			if ename == "CHANNEL_EXECUTE_COMPLETE" && euuid == headers["Event-UUID"] {
-				return event, nil
-			} else if ename == "CHANNEL_HANGUP" || ename == "CHANNEL_HANGUP_COMPLETE" {
-				return nil, fmt.Errorf(EChannelHangup)
-			}
-		case err := <-fs.errors:
-			return nil, err
-		}
-	}
 
+	select {
+	case event := <-fs.appEvent:
+		return event, nil
+	case err := <-fs.appError:
+		return nil, err
+	}
 }
 
 //IEvent is fs event
@@ -158,6 +168,7 @@ func eslSessionHandler(msg IEvent, esl IEsl, f AppFactory) {
 	}
 	sessions[s.uuid] = &s
 	app := f(&s)
+	go s.dispatch()
 	go app.Run()
 	for {
 		cmd, more := <-s.cmds
@@ -178,7 +189,7 @@ func EslConnectionHandler(client IEsl, factory AppFactory) {
 
 			// If it contains EOF, we really dont care...
 			if !strings.Contains(err.Error(), "EOF") && err.Error() != "unexpected end of JSON input" {
-				fmt.Printf("Error while reading Freeswitch message: %s", err)
+				logger.Error("Error while reading Freeswitch message: %s", err)
 			}
 			for _, v := range sessions {
 				v.errors <- err
@@ -188,7 +199,7 @@ func EslConnectionHandler(client IEsl, factory AppFactory) {
 		eventName := msg.GetHeader("Event-Name")
 		eventSubclass := msg.GetHeader("Event-Subclass")
 		channelUUID := msg.GetHeader("Unique-ID")
-		fmt.Printf("got event:%s(%s) uuid:%s", eventName, eventSubclass, channelUUID)
+		logger.Debug("got event:%s(%s) uuid:%s", eventName, eventSubclass, channelUUID)
 		if eventName == "CHANNEL_PARK" {
 			go eslSessionHandler(msg, client, factory)
 		} else if channelUUID != "" {
@@ -196,19 +207,19 @@ func EslConnectionHandler(client IEsl, factory AppFactory) {
 			if r {
 				if eventName == "CHANNEL_DESTROY" {
 					delete(sessions, channelUUID)
-					fmt.Printf("deleted channel %s. remained channels:%d", channelUUID, len(sessions))
+					logger.Debug("deleted channel %s. remained channels:%d", channelUUID, len(sessions))
 					continue
 				}
 				select {
 				case s.events <- msg:
-					fmt.Printf("handled event %s for channel %s", msg.GetHeader("Event-Name"), msg.GetHeader("Unique-ID"))
+					logger.Debug("handled event %s for channel %s", msg.GetHeader("Event-Name"), msg.GetHeader("Unique-ID"))
 				default:
-					fmt.Printf("ignoring event %s for channel %s", msg.GetHeader("Event-Name"), msg.GetHeader("Unique-ID"))
+					logger.Debug("ignoring event %s for channel %s", msg.GetHeader("Event-Name"), msg.GetHeader("Unique-ID"))
 				}
 
 			}
 		}
 		//goesl.Debug("%v", msg)
 	}
-	fmt.Printf("Application exitted")
+	logger.Info("Application exitted")
 }
