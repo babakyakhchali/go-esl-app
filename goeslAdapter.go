@@ -1,7 +1,7 @@
 package main
 
 import (
-	eslession "github.com/babakyakhchali/go-esl-wrapper/eslsession"
+	fs "github.com/babakyakhchali/go-esl-wrapper/fs"
 	goesl "github.com/babakyakhchali/go-esl-wrapper/goesl"
 )
 
@@ -11,7 +11,7 @@ type EslWrapper struct {
 }
 
 //ReadMessage wrapper
-func (c *EslWrapper) ReadMessage() (eslession.IEvent, error) {
+func (c *EslWrapper) ReadMessage() (fs.IEvent, error) {
 	msg, err := c.Client.ReadMessage()
 	return &MessageWrapper{Message: msg}, err
 }
@@ -27,7 +27,7 @@ func (m *MessageWrapper) GetBody() []byte {
 }
 
 //SendMsg wrapper
-func (c *EslWrapper) SendMsg(cmd map[string]string, uuid string, data string) (eslession.IEvent, error) {
+func (c *EslWrapper) SendMsg(cmd map[string]string, uuid string, data string) (fs.IEvent, error) {
 	msg, err := c.Client.SendMsg(cmd, uuid, data)
 	return &MessageWrapper{Message: msg}, err
 }

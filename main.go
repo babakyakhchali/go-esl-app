@@ -4,12 +4,13 @@ import (
 	"fmt"
 
 	eslession "github.com/babakyakhchali/go-esl-wrapper/eslsession"
+	fs "github.com/babakyakhchali/go-esl-wrapper/fs"
 	goesl "github.com/babakyakhchali/go-esl-wrapper/goesl"
 )
 
 //MyApp will act as freeswitch extension xml which wraps an esl session
 type MyApp struct {
-	session eslession.ISession
+	session fs.ISession
 }
 
 //Run is called to control a channel like freeswitch xml extension does
@@ -25,7 +26,7 @@ func (app *MyApp) Run() {
 	app.session.Hangup()
 }
 
-func appFactory(s eslession.ISession) eslession.IEslApp {
+func appFactory(s fs.ISession) eslession.IEslApp {
 	return &MyApp{
 		session: s,
 	}

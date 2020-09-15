@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	fs "github.com/babakyakhchali/go-esl-wrapper/fs"
 	l "github.com/babakyakhchali/go-esl-wrapper/logger"
 	"github.com/google/uuid"
 )
@@ -15,35 +16,23 @@ var (
 	logger   = l.NewLogger("eslsession")
 )
 
-//ISession is fs call interface
-type ISession interface {
-	Set(name string, value string) (IEvent, error)
-	Answer() (IEvent, error)
-	Hangup(cause ...string) (IEvent, error)
-	Playback(path string) (IEvent, error)
-	PlayAndGetDigits(min uint, max uint, tries uint, timeout uint,
-		terminators string, file string, invalidFile string, varName string, regexp string, digitTimeout uint,
-		transferOnFailure string) (IEvent, error)
-	PlayAndGetOneDigit(path string) (uint64, error)
-}
-
 //Session main object to interact with a call
 type Session struct {
 	FsConnector
 }
 
 //Set sets a variable on managed channel
-func (s *Session) Set(name string, value string) (IEvent, error) {
+func (s *Session) Set(name string, value string) (fs.IEvent, error) {
 	return s.exec(name, value)
 }
 
 //Answer runs answer application on managed channel
-func (s *Session) Answer() (IEvent, error) {
+func (s *Session) Answer() (fs.IEvent, error) {
 	return s.exec("answer", "")
 }
 
 //Hangup runs hangup application on managed channel
-func (s *Session) Hangup(cause ...string) (IEvent, error) {
+func (s *Session) Hangup(cause ...string) (fs.IEvent, error) {
 	c := "NORMAL_CLEARING"
 	if len(cause) > 0 {
 		c = cause[0]
@@ -52,14 +41,14 @@ func (s *Session) Hangup(cause ...string) (IEvent, error) {
 }
 
 //Playback runs playback application on managed channel
-func (s *Session) Playback(path string) (IEvent, error) {
+func (s *Session) Playback(path string) (fs.IEvent, error) {
 	return s.exec("playback", path)
 }
 
 //PlayAndGetDigits runs play_and_get_digits application on managed channel
 func (s *Session) PlayAndGetDigits(min uint, max uint, tries uint, timeout uint,
 	terminators string, file string, invalidFile string, varName string, regexp string, digitTimeout uint,
-	transferOnFailure string) (IEvent, error) {
+	transferOnFailure string) (fs.IEvent, error) {
 	args := fmt.Sprintf("%d %d %d %d %s %s %s %s %s %d %s",
 		min, max, tries, timeout, terminators, file, invalidFile, varName, regexp, digitTimeout, transferOnFailure)
 	return s.exec("play_and_get_digits", strings.TrimSpace(args))
@@ -79,8 +68,8 @@ func (s *Session) PlayAndGetOneDigit(path string) (uint64, error) {
 type FsConnector struct {
 	uuid           string
 	cmds           chan map[string]string
-	events         chan IEvent
-	appEvent       chan IEvent
+	events         chan fs.IEvent
+	appEvent       chan fs.IEvent
 	appError       chan error
 	errors         chan error
 	currentAppUUID string
@@ -110,7 +99,7 @@ func (fs *FsConnector) dispatch() {
 }
 
 //Application-UUID Event-UUID
-func (fs *FsConnector) exec(app string, args string) (IEvent, error) {
+func (fs *FsConnector) exec(app string, args string) (fs.IEvent, error) {
 	if fs.closed {
 		return nil, fmt.Errorf(EChannelHangup)
 	}
@@ -130,12 +119,6 @@ func (fs *FsConnector) exec(app string, args string) (IEvent, error) {
 	}
 }
 
-//IEvent is fs event
-type IEvent interface {
-	GetHeader(name string) string
-	GetBody() []byte
-}
-
 //SessionManager manages sessions
 type SessionManager struct {
 	sessions map[string]*Session
@@ -146,24 +129,17 @@ type IEslApp interface {
 	Run()
 }
 
-//IEsl common interface for freeswitch esl
-type IEsl interface {
-	Send(cmd string) error
-	SendMsg(cmd map[string]string, uuid string, data string) (IEvent, error)
-	ReadMessage() (IEvent, error)
-}
-
 //AppFactory signature for applications using this module
-type AppFactory func(s ISession) IEslApp
+type AppFactory func(s fs.ISession) IEslApp
 
-func eslSessionHandler(msg IEvent, esl IEsl, f AppFactory) {
+func eslSessionHandler(msg fs.IEvent, esl fs.IEsl, f AppFactory) {
 	s := Session{
 		FsConnector: FsConnector{
 			uuid:     msg.GetHeader("Unique-ID"),
 			cmds:     make(chan map[string]string),
 			appError: make(chan error),
-			appEvent: make(chan IEvent),
-			events:   make(chan IEvent),
+			appEvent: make(chan fs.IEvent),
+			events:   make(chan fs.IEvent),
 			errors:   make(chan error),
 			closed:   false,
 		},
@@ -184,7 +160,7 @@ func eslSessionHandler(msg IEvent, esl IEsl, f AppFactory) {
 
 //EslConnectionHandler listens for channel events. On receiving a park event creates a Session and runs
 //the app created by factory in a new go routine
-func EslConnectionHandler(client IEsl, factory AppFactory) {
+func EslConnectionHandler(client fs.IEsl, factory AppFactory) {
 	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY")
 	for {
 		msg, err := client.ReadMessage()
