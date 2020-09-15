@@ -182,7 +182,8 @@ func eslSessionHandler(msg IEvent, esl IEsl, f AppFactory) {
 	fmt.Printf("session ended:%s", s.uuid)
 }
 
-//EslConnectionHandler handles incomming events
+//EslConnectionHandler listens for channel events. On receiving a park event creates a Session and runs
+//the app created by factory in a new go routine
 func EslConnectionHandler(client IEsl, factory AppFactory) {
 	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY")
 	for {

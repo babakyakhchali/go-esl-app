@@ -7,7 +7,25 @@ import (
 	goesl "github.com/babakyakhchali/go-esl-wrapper/goesl"
 )
 
-func h(s eslession.ISession) eslession.IEslApp {
+//MyApp will act as freeswitch extension xml which wraps an esl session
+type MyApp struct {
+	session eslession.ISession
+}
+
+//Run is called to control a channel like freeswitch xml extension does
+func (app *MyApp) Run() {
+	app.session.Answer()
+	app.session.Playback("conference\\8000\\conf-alone.wav")
+	i, e := app.session.PlayAndGetOneDigit("phrase:demo_ivr_sub_menu")
+	if e != nil {
+		fmt.Printf("error is:%v\n", e)
+	} else {
+		fmt.Printf("input is:%d\n", i)
+	}
+	app.session.Hangup()
+}
+
+func appFactory(s eslession.ISession) eslession.IEslApp {
 	return &MyApp{
 		session: s,
 	}
@@ -22,10 +40,9 @@ func main() {
 		return
 	}
 
-	goesl.Debug("Yuhu! New client: %q", client)
 	go client.Handle()
 
 	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY")
-	eslession.EslConnectionHandler(w, h)
+	eslession.EslConnectionHandler(w, appFactory)
 	fmt.Printf("Application exitted")
 }
