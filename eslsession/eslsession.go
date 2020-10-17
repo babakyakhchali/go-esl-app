@@ -23,12 +23,40 @@ type Session struct {
 
 //Set sets a variable on managed channel
 func (s *Session) Set(name string, value string) (fs.IEvent, error) {
-	return s.exec(name, value)
+	return s.exec("set", name+"="+value)
+}
+
+//Unset sets a variable on managed channel
+func (s *Session) Unset(name string) (fs.IEvent, error) {
+	return s.exec("unseset", name)
+}
+
+//MultiSet sets multiple variable on managed channel
+func (s *Session) MultiSet(vars map[string]string) (fs.IEvent, error) {
+	c := "^^:"
+	for k, v := range vars {
+		c += k + "=" + v + ":"
+	}
+	return s.exec("multiset", c)
+}
+
+//MultiUnset sets multiple variable on managed channel
+func (s *Session) MultiUnset(vars map[string]string) (fs.IEvent, error) {
+	c := "^^:"
+	for k, v := range vars {
+		c += k + "=" + v + ":"
+	}
+	return s.exec("multiunset", c)
 }
 
 //Answer runs answer application on managed channel
 func (s *Session) Answer() (fs.IEvent, error) {
 	return s.exec("answer", "")
+}
+
+//PreAnswer runs pre_answer application on managed channel
+func (s *Session) PreAnswer() (fs.IEvent, error) {
+	return s.exec("pre_answer", "")
 }
 
 //Hangup runs hangup application on managed channel
@@ -64,6 +92,31 @@ func (s *Session) PlayAndGetOneDigit(path string) (uint64, error) {
 	return strconv.ParseUint(r.GetHeader("variable_"+varname), 10, 32)
 }
 
+//Bridge runs bridge application on managed channel
+func (s *Session) Bridge(bstr string) (fs.IEvent, error) {
+	return s.exec("bridge", bstr)
+}
+
+//Voicemail runs voicemail application on managed channel
+func (s *Session) Voicemail(settingsProfile string, domain string, username string) (fs.IEvent, error) {
+	return s.exec("voicemail", fmt.Sprintf("%s %s %s", settingsProfile, domain, username))
+}
+
+//SendEvent runs event application on managed channel
+func (s *Session) SendEvent(headers map[string]string) (fs.IEvent, error) {
+	data := ""
+	i := 0
+	for k, v := range headers {
+		data += k + "=" + v
+		i++
+		if i < len(headers) {
+			data += ","
+		}
+	}
+	return s.exec("event", data)
+	//<action application="event" data="Event-Subclass=VoiceWorks.pl::ACDnotify,Event-Name=CUSTOM,state=Intro,condition=IntroPlayed"/>
+}
+
 //FsConnector acts as a channel between fs and session
 type FsConnector struct {
 	uuid           string
@@ -88,11 +141,18 @@ func (fs *FsConnector) dispatch() {
 			ename := event.GetHeader("Event-Name")
 			logger.Debug("dispatch(): got event %s:%s", ename, fs.uuid)
 			euuid := event.GetHeader("Application-UUID")
-			if ename == "CHANNEL_EXECUTE_COMPLETE" && euuid == fs.currentAppUUID {
-				fs.appEvent <- event
+			if ename == "CHANNEL_DESTROY" || (ename == "CHANNEL_EXECUTE_COMPLETE" && euuid == fs.currentAppUUID) {
+				select { //this must be nonblocking
+				case fs.appEvent <- event:
+				default:
+				}
 			}
 		case err := <-fs.errors:
-			fs.appError <- err
+			select { //this must be nonblocking
+			case fs.appError <- err:
+			default:
+			}
+
 		}
 	}
 
@@ -113,6 +173,9 @@ func (fs *FsConnector) exec(app string, args string) (fs.IEvent, error) {
 
 	select {
 	case event := <-fs.appEvent:
+		if event.GetHeader("Event-Name") == "CHANNEL_DESTROY" {
+			return event, fmt.Errorf("ChannelDestroyed")
+		}
 		return event, nil
 	case err := <-fs.appError:
 		return nil, err
@@ -127,6 +190,8 @@ type SessionManager struct {
 //IEslApp all call handler apps must implement this
 type IEslApp interface {
 	Run()
+	IsApplicable(fs.IEvent) bool
+	SetParkData(fs.IEvent)
 }
 
 //AppFactory signature for applications using this module
@@ -146,6 +211,11 @@ func eslSessionHandler(msg fs.IEvent, esl fs.IEsl, f AppFactory) {
 	}
 	sessions[s.uuid] = &s
 	app := f(&s)
+	if !app.IsApplicable((msg)) {
+		fmt.Printf("session not applicable:%s", s.uuid)
+		return
+	}
+	app.SetParkData(msg)
 	go s.dispatch()
 	go app.Run()
 	for {
@@ -187,7 +257,6 @@ func EslConnectionHandler(client fs.IEsl, factory AppFactory) {
 				if eventName == "CHANNEL_DESTROY" {
 					delete(sessions, channelUUID)
 					logger.Debug("deleted channel %s. remained channels:%d", channelUUID, len(sessions))
-					continue
 				}
 				select {
 				case s.events <- msg:

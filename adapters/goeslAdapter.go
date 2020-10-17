@@ -1,4 +1,4 @@
-package main
+package adapters
 
 import (
 	fs "github.com/babakyakhchali/go-esl-wrapper/fs"

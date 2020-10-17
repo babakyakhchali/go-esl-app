@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 
+	adapters "github.com/babakyakhchali/go-esl-wrapper/adapters"
 	eslession "github.com/babakyakhchali/go-esl-wrapper/eslsession"
 	fs "github.com/babakyakhchali/go-esl-wrapper/fs"
 	goesl "github.com/babakyakhchali/go-esl-wrapper/goesl"
@@ -11,10 +13,19 @@ import (
 //MyApp will act as freeswitch extension xml which wraps an esl session
 type MyApp struct {
 	session fs.ISession
+	data    fs.IEvent
 }
 
-//Run is called to control a channel like freeswitch xml extension does
-func (app *MyApp) Run() {
+func (app *MyApp) SetParkData(event fs.IEvent) {
+	app.data = event
+}
+
+func (app *MyApp) IsApplicable(event fs.IEvent) bool {
+	return event.GetHeader("variable_chakavak_manage") != ""
+}
+
+//Run2 is called to control a channel like freeswitch xml extension does
+func (app *MyApp) Run2() {
 	app.session.Answer()
 	app.session.Playback("conference\\8000\\conf-alone.wav")
 	i, e := app.session.PlayAndGetOneDigit("phrase:demo_ivr_sub_menu")
@@ -25,6 +36,37 @@ func (app *MyApp) Run() {
 	}
 	app.session.Hangup()
 }
+func prettyPrint(o interface{}) {
+	b, _ := json.MarshalIndent(o, "", "  ")
+
+	fmt.Print(string(b))
+}
+
+//Run is called to control a channel like freeswitch xml extension does
+func (app *MyApp) Run() {
+	app.session.PreAnswer()
+	/*
+			esl_session.setvar("hangup_after_bridge", "true")
+		    esl_session.setvar("continue_on_fail", "true")
+		    esl_session.setvar("call_timeout", "20")
+		    esl_session.setvar("effective_caller_id_number", route_caller_id)*/
+	vars := map[string]string{
+		"hangup_after_bridge":        "false",
+		"continue_on_fail":           "true",
+		"call_timeout":               "20",
+		"effective_caller_id_number": "hoooooa",
+	}
+	app.session.MultiSet(vars)
+	username := app.data.GetHeader("variable_chakavak_destination")
+	domain := app.data.GetHeader("variable_domain_name")
+	r, _ := app.session.Bridge("user/" + username)
+	if failCause := r.GetHeader("variable_originate_failed_cause"); failCause != "" {
+		fmt.Printf("call failed with cause:%s", failCause)
+		r, _ = app.session.Voicemail("default", domain, username)
+	}
+	prettyPrint(r)
+	app.session.Hangup("NORMAL_CLEARING")
+}
 
 func appFactory(s fs.ISession) eslession.IEslApp {
 	return &MyApp{
@@ -34,7 +76,7 @@ func appFactory(s fs.ISession) eslession.IEslApp {
 
 func main() {
 	client, err := goesl.NewClient("127.0.0.1", 8021, "ClueCon", 3)
-	w := &EslWrapper{Client: client}
+	w := &adapters.EslWrapper{Client: client}
 
 	if err != nil {
 		goesl.Error("Error while creating new client: %s", err)
@@ -43,7 +85,7 @@ func main() {
 
 	go client.Handle()
 
-	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY")
+	//client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY")
 	eslession.EslConnectionHandler(w, appFactory)
 	fmt.Printf("Application exitted")
 }
