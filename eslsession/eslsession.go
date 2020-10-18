@@ -117,6 +117,11 @@ func (s *Session) SendEvent(headers map[string]string) (fs.IEvent, error) {
 	//<action application="event" data="Event-Subclass=VoiceWorks.pl::ACDnotify,Event-Name=CUSTOM,state=Intro,condition=IntroPlayed"/>
 }
 
+//AddEventHandler used to set handlers for different events by event name
+func (s *Session) AddEventHandler(eventName string, handler fs.FsEventHandlerFunc) {
+	s.EventHandlers[eventName] = handler
+}
+
 //FsConnector acts as a channel between fs and session
 type FsConnector struct {
 	uuid           string
@@ -128,6 +133,7 @@ type FsConnector struct {
 	currentAppUUID string
 	closed         bool
 	logger         *l.NsLogger
+	EventHandlers  map[string]fs.FsEventHandlerFunc
 }
 
 var (
@@ -147,6 +153,8 @@ func (fs *FsConnector) dispatch() {
 				case fs.appEvent <- event:
 				default:
 				}
+			} else if h, e := fs.EventHandlers[ename]; e {
+				go h(event)
 			}
 		case err := <-fs.errors:
 			select { //this must be nonblocking
@@ -206,13 +214,14 @@ type AppFactory func(s fs.ISession) IEslApp
 func eslSessionHandler(msg fs.IEvent, esl fs.IEsl, f AppFactory) {
 	s := Session{
 		FsConnector: FsConnector{
-			uuid:     msg.GetHeader("Unique-ID"),
-			cmds:     make(chan map[string]string),
-			appError: make(chan error),
-			appEvent: make(chan fs.IEvent),
-			events:   make(chan fs.IEvent),
-			errors:   make(chan error),
-			closed:   false,
+			uuid:          msg.GetHeader("Unique-ID"),
+			cmds:          make(chan map[string]string),
+			appError:      make(chan error),
+			appEvent:      make(chan fs.IEvent),
+			events:        make(chan fs.IEvent),
+			errors:        make(chan error),
+			closed:        false,
+			EventHandlers: make(map[string]fs.FsEventHandlerFunc),
 		},
 	}
 	s.logger = l.NewLogger("eslsession:" + msg.GetHeader("Unique-ID"))
@@ -239,7 +248,7 @@ func eslSessionHandler(msg fs.IEvent, esl fs.IEsl, f AppFactory) {
 //the app created by factory in a new go routine
 func EslConnectionHandler(client fs.IEsl, factory AppFactory) {
 
-	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY")
+	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY CHANNEL_ANSWER")
 	for {
 		sessionLogger.Debug("Ready for event")
 		msg, err := client.ReadEvent()

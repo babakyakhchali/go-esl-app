@@ -13,6 +13,9 @@ type IEsl interface {
 	ReadEvent() (IEvent, error)
 }
 
+// FsEventHandlerFunc a function to receive an event
+type FsEventHandlerFunc func(IEvent)
+
 //ISession is fs call interface
 type ISession interface {
 	Set(name string, value string) (IEvent, error)
@@ -31,4 +34,6 @@ type ISession interface {
 	Voicemail(settingsProfile string, domain string, username string) (IEvent, error)
 
 	SendEvent(headers map[string]string) (IEvent, error)
+
+	AddEventHandler(eventName string, handler FsEventHandlerFunc)
 }

@@ -47,8 +47,14 @@ func prettyPrint(o interface{}) {
 	fmt.Print(string(b))
 }
 
+func (app *MyApp) answerHandler(event fs.IEvent) {
+	fmt.Printf("Gooot answer!!! %s", app.data.GetHeader("Unique-ID"))
+	prettyPrint(event)
+}
+
 //Run is called to control a channel like freeswitch xml extension does
 func (app *MyApp) Run() {
+	app.session.AddEventHandler("CHANNEL_ANSWER", app.answerHandler)
 	app.session.PreAnswer()
 	/*
 			esl_session.setvar("hangup_after_bridge", "true")
