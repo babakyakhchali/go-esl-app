@@ -8,6 +8,11 @@ import (
 	eslession "github.com/babakyakhchali/go-esl-wrapper/eslsession"
 	fs "github.com/babakyakhchali/go-esl-wrapper/fs"
 	goesl "github.com/babakyakhchali/go-esl-wrapper/goesl"
+	l "github.com/babakyakhchali/go-esl-wrapper/logger"
+)
+
+var (
+	appLogger = l.NewLogger("main")
 )
 
 //MyApp will act as freeswitch extension xml which wraps an esl session
@@ -50,21 +55,20 @@ func (app *MyApp) Run() {
 		    esl_session.setvar("continue_on_fail", "true")
 		    esl_session.setvar("call_timeout", "20")
 		    esl_session.setvar("effective_caller_id_number", route_caller_id)*/
-	vars := map[string]string{
-		"hangup_after_bridge":        "false",
-		"continue_on_fail":           "true",
-		"call_timeout":               "20",
-		"effective_caller_id_number": "hoooooa",
-	}
-	app.session.MultiSet(vars)
-	username := app.data.GetHeader("variable_chakavak_destination")
-	domain := app.data.GetHeader("variable_domain_name")
+	// vars := map[string]string{
+	// 	"hangup_after_bridge":        "false",
+	// 	"continue_on_fail":           "true",
+	// 	"call_timeout":               "20",
+	// 	"effective_caller_id_number": "hoooooa",
+	// }
+	// app.session.MultiSet(vars)
+	username := app.data.GetHeader("Caller-Destination-Number")
 	r, _ := app.session.Bridge("user/" + username)
 	if failCause := r.GetHeader("variable_originate_failed_cause"); failCause != "" {
 		fmt.Printf("call failed with cause:%s", failCause)
-		r, _ = app.session.Voicemail("default", domain, username)
+		r, _ = app.session.Voicemail("default", "$${domain}", username)
 	}
-	prettyPrint(r)
+	//prettyPrint(r)
 	app.session.Hangup("NORMAL_CLEARING")
 }
 
@@ -79,7 +83,7 @@ func main() {
 	w := &adapters.EslWrapper{Client: client}
 
 	if err != nil {
-		goesl.Error("Error while creating new client: %s", err)
+		appLogger.Error("Error while creating new client: %s", err)
 		return
 	}
 
@@ -87,5 +91,5 @@ func main() {
 
 	//client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY")
 	eslession.EslConnectionHandler(w, appFactory)
-	fmt.Printf("Application exitted")
+	appLogger.Info("Application exitted")
 }

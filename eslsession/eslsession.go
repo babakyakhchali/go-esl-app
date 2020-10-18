@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	sessions = map[string]*Session{}
-	logger   = l.NewLogger("eslsession")
+	sessions      = map[string]*Session{}
+	sessionLogger = l.NewLogger("eslsession")
 )
 
 //Session main object to interact with a call
@@ -127,6 +127,7 @@ type FsConnector struct {
 	errors         chan error
 	currentAppUUID string
 	closed         bool
+	logger         *l.NsLogger
 }
 
 var (
@@ -139,7 +140,7 @@ func (fs *FsConnector) dispatch() {
 		select {
 		case event := <-fs.events:
 			ename := event.GetHeader("Event-Name")
-			logger.Debug("dispatch(): got event %s:%s", ename, fs.uuid)
+			fs.logger.Debug("dispatch(): got event %s:%s", ename, fs.uuid)
 			euuid := event.GetHeader("Application-UUID")
 			if ename == "CHANNEL_DESTROY" || (ename == "CHANNEL_EXECUTE_COMPLETE" && euuid == fs.currentAppUUID) {
 				select { //this must be nonblocking
@@ -171,13 +172,18 @@ func (fs *FsConnector) exec(app string, args string) (fs.IEvent, error) {
 	fs.currentAppUUID = headers["Event-UUID"]
 	fs.cmds <- headers
 
+	fs.logger.Debug("exec(%s,%s)(%s) waiting for response", app, args, fs.currentAppUUID)
+
 	select {
 	case event := <-fs.appEvent:
+		ename := event.GetHeader("Event-Name")
+		fs.logger.Debug("exec(%s,%s)(%s) got %s", app, args, fs.currentAppUUID, ename)
 		if event.GetHeader("Event-Name") == "CHANNEL_DESTROY" {
 			return event, fmt.Errorf("ChannelDestroyed")
 		}
 		return event, nil
 	case err := <-fs.appError:
+		fs.logger.Debug("exec(%s,%s)(%s) error: %s", app, args, fs.currentAppUUID, err)
 		return nil, err
 	}
 }
@@ -209,10 +215,11 @@ func eslSessionHandler(msg fs.IEvent, esl fs.IEsl, f AppFactory) {
 			closed:   false,
 		},
 	}
+	s.logger = l.NewLogger("eslsession:" + msg.GetHeader("Unique-ID"))
 	sessions[s.uuid] = &s
 	app := f(&s)
 	if !app.IsApplicable((msg)) {
-		fmt.Printf("session not applicable:%s", s.uuid)
+		s.logger.Error("session not applicable:%s", s.uuid)
 		return
 	}
 	app.SetParkData(msg)
@@ -225,20 +232,22 @@ func eslSessionHandler(msg fs.IEvent, esl fs.IEsl, f AppFactory) {
 		}
 		esl.SendMsg(cmd, s.uuid, "")
 	}
-	fmt.Printf("session ended:%s", s.uuid)
+	s.logger.Info("session ended:%s", s.uuid)
 }
 
 //EslConnectionHandler listens for channel events. On receiving a park event creates a Session and runs
 //the app created by factory in a new go routine
 func EslConnectionHandler(client fs.IEsl, factory AppFactory) {
+
 	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY")
 	for {
-		msg, err := client.ReadMessage()
+		sessionLogger.Debug("Ready for event")
+		msg, err := client.ReadEvent()
 		if err != nil {
-
+			sessionLogger.Error("Error %s", err)
 			// If it contains EOF, we really dont care...
 			if !strings.Contains(err.Error(), "EOF") && err.Error() != "unexpected end of JSON input" {
-				logger.Error("Error while reading Freeswitch message: %s", err)
+				sessionLogger.Error("Error while reading Freeswitch message: %s", err)
 			}
 			for _, v := range sessions {
 				v.errors <- err
@@ -248,26 +257,25 @@ func EslConnectionHandler(client fs.IEsl, factory AppFactory) {
 		eventName := msg.GetHeader("Event-Name")
 		eventSubclass := msg.GetHeader("Event-Subclass")
 		channelUUID := msg.GetHeader("Unique-ID")
-		logger.Debug("got event:%s(%s) uuid:%s", eventName, eventSubclass, channelUUID)
+		sessionLogger.Debug("got event:%s(%s) uuid:%s", eventName, eventSubclass, channelUUID)
 		if eventName == "CHANNEL_PARK" {
 			go eslSessionHandler(msg, client, factory)
 		} else if channelUUID != "" {
 			s, r := sessions[channelUUID]
 			if r {
-				if eventName == "CHANNEL_DESTROY" {
-					delete(sessions, channelUUID)
-					logger.Debug("deleted channel %s. remained channels:%d", channelUUID, len(sessions))
-				}
 				select {
 				case s.events <- msg:
-					logger.Debug("handled event %s for channel %s", msg.GetHeader("Event-Name"), msg.GetHeader("Unique-ID"))
+					sessionLogger.Debug("handled event %s for channel %s", msg.GetHeader("Event-Name"), msg.GetHeader("Unique-ID"))
 				default:
-					logger.Debug("ignoring event %s for channel %s", msg.GetHeader("Event-Name"), msg.GetHeader("Unique-ID"))
+					sessionLogger.Debug("ignoring event %s for channel %s", msg.GetHeader("Event-Name"), msg.GetHeader("Unique-ID"))
 				}
-
+				if eventName == "CHANNEL_DESTROY" {
+					delete(sessions, channelUUID)
+					sessionLogger.Debug("deleted channel %s. remained channels:%d", channelUUID, len(sessions))
+				}
 			}
 		}
 		//goesl.Debug("%v", msg)
 	}
-	logger.Info("Application exitted")
+	sessionLogger.Info("Application exitted")
 }

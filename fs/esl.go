@@ -8,9 +8,9 @@ type IEvent interface {
 
 //IEsl common interface for freeswitch esl
 type IEsl interface {
-	Send(cmd string) error
+	Send(cmd string) (IEvent, error)
 	SendMsg(cmd map[string]string, uuid string, data string) (IEvent, error)
-	ReadMessage() (IEvent, error)
+	ReadEvent() (IEvent, error)
 }
 
 //ISession is fs call interface

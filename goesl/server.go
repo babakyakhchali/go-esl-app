@@ -12,6 +12,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	l "github.com/babakyakhchali/go-esl-wrapper/logger"
+)
+
+var (
+	serverLogger = l.NewLogger("message")
 )
 
 // OutboundServer - In case you need to start server, this Struct have it covered
@@ -26,14 +32,14 @@ type OutboundServer struct {
 
 // Start - Will start new outbound server
 func (s *OutboundServer) Start() error {
-	Notice("Starting Freeswitch Outbound Server @ (address: %s) ...", s.Addr)
+	serverLogger.Notice("Starting Freeswitch Outbound Server @ (address: %s) ...", s.Addr)
 
 	var err error
 
 	s.Listener, err = net.Listen(s.Proto, s.Addr)
 
 	if err != nil {
-		Error(ECouldNotStartListener, err)
+		serverLogger.Error(ECouldNotStartListener, err)
 		return err
 	}
 
@@ -41,23 +47,26 @@ func (s *OutboundServer) Start() error {
 
 	go func() {
 		for {
-			Warning("Waiting for incoming connections ...")
+			serverLogger.Warning("Waiting for incoming connections ...")
 
 			c, err := s.Accept()
 
 			if err != nil {
-				Error(EListenerConnection, err)
+				serverLogger.Error(EListenerConnection, err)
 				quit <- true
 				break
 			}
 
 			conn := SocketConnection{
-				Conn: c,
-				err:  make(chan error),
-				m:    make(chan *Message),
+				Conn:       c,
+				eventError: make(chan error),
+				events:     make(chan *Message),
+
+				replyError: make(chan error),
+				replies:    make(chan *Message),
 			}
 
-			Notice("Got new connection from: %s", conn.OriginatorAddr())
+			serverLogger.Notice("Got new connection from: %s", conn.OriginatorAddr())
 
 			go conn.Handle()
 
@@ -75,7 +84,7 @@ func (s *OutboundServer) Start() error {
 
 // Stop - Will close server connection once SIGTERM/Interrupt is received
 func (s *OutboundServer) Stop() {
-	Warning("Stopping Outbound Server ...")
+	serverLogger.Warning("Stopping Outbound Server ...")
 	s.Close()
 }
 

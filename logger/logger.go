@@ -7,46 +7,27 @@
 package logger
 
 import (
-	"os"
-
-	"github.com/op/go-logging"
-)
-
-var (
-	log = logging.MustGetLogger("goesl")
-
-	// Example format string. Everything except the message has a custom color
-	// which is dependent on the log level. Many fields have a custom output
-	// formatting too, eg. the time returns the hour down to the milli second.
-	format = logging.MustStringFormatter(
-		"%{color}%{time:15:04:05.000} %{shortfunc} ▶ %{level:.8s}%{color:reset} %{message}",
-	)
+	"log"
 )
 
 func Debug(message string, args ...interface{}) {
-	log.Debugf(message, args...)
+	log.Printf(message, args...)
 }
 
 func Error(message string, args ...interface{}) {
-	log.Errorf(message, args...)
+	log.Printf(message, args...)
 }
 
 func Notice(message string, args ...interface{}) {
-	log.Noticef(message, args...)
+	log.Printf(message, args...)
 }
 
 func Info(message string, args ...interface{}) {
-	log.Infof(message, args...)
+	log.Printf(message, args...)
 }
 
 func Warning(message string, args ...interface{}) {
-	log.Warningf(message, args...)
-}
-
-func init() {
-	backend := logging.NewLogBackend(os.Stderr, "", 0)
-	formatter := logging.NewBackendFormatter(backend, format)
-	logging.SetBackend(formatter)
+	log.Printf(message, args...)
 }
 
 type NsLogger struct {
@@ -54,22 +35,22 @@ type NsLogger struct {
 }
 
 func (l *NsLogger) Debug(message string, args ...interface{}) {
-	Debug("["+l.ns+"] "+message, args)
+	Debug("["+l.ns+"] "+message, args...)
 }
 
 func (l *NsLogger) Error(message string, args ...interface{}) {
-	Error("["+l.ns+"] "+message, args)
+	Error("["+l.ns+"] "+message, args...)
 }
 
 func (l *NsLogger) Notice(message string, args ...interface{}) {
-	Notice("["+l.ns+"] "+message, args)
+	Notice("["+l.ns+"] "+message, args...)
 }
 
 func (l *NsLogger) Info(message string, args ...interface{}) {
-	Info("["+l.ns+"] "+message, args)
+	Info("["+l.ns+"] "+message, args...)
 }
 func (l *NsLogger) Warning(message string, args ...interface{}) {
-	Warning("["+l.ns+"] "+message, args)
+	Warning("["+l.ns+"] "+message, args...)
 }
 
 func NewLogger(ns string) *NsLogger {

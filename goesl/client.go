@@ -13,6 +13,12 @@ import (
 	"net"
 	"strconv"
 	"time"
+
+	l "github.com/babakyakhchali/go-esl-wrapper/logger"
+)
+
+var (
+	logger = l.NewLogger("client")
 )
 
 // Client - In case you need to do inbound dialing against freeswitch server in order to originate call or see
@@ -34,9 +40,12 @@ func (c *Client) EstablishConnection() error {
 	}
 
 	c.SocketConnection = SocketConnection{
-		Conn: conn,
-		err:  make(chan error),
-		m:    make(chan *Message),
+		Conn:       conn,
+		eventError: make(chan error),
+		events:     make(chan *Message),
+
+		replyError: make(chan error),
+		replies:    make(chan *Message),
 	}
 
 	return nil
@@ -48,20 +57,20 @@ func (c *Client) Authenticate() error {
 
 	m, err := newMessage(bufio.NewReaderSize(c, ReadBufferSize), false)
 	if err != nil {
-		Error(ECouldNotCreateMessage, err)
+		logger.Error(ECouldNotCreateMessage, err)
 		return err
 	}
 
 	cmr, err := m.tr.ReadMIMEHeader()
 	if err != nil && err.Error() != "EOF" {
-		Error(ECouldNotReadMIMEHeaders, err)
+		logger.Error(ECouldNotReadMIMEHeaders, err)
 		return err
 	}
 
-	Debug("A: %v\n", cmr)
+	logger.Debug("A: %v\n", cmr)
 
 	if cmr.Get("Content-Type") != "auth/request" {
-		Error(EUnexpectedAuthHeader, cmr.Get("Content-Type"))
+		logger.Error(EUnexpectedAuthHeader, cmr.Get("Content-Type"))
 		return fmt.Errorf(EUnexpectedAuthHeader, cmr.Get("Content-Type"))
 	}
 
@@ -73,12 +82,12 @@ func (c *Client) Authenticate() error {
 
 	am, err := m.tr.ReadMIMEHeader()
 	if err != nil && err.Error() != "EOF" {
-		Error(ECouldNotReadMIMEHeaders, err)
+		logger.Error(ECouldNotReadMIMEHeaders, err)
 		return err
 	}
 
 	if am.Get("Reply-Text") != "+OK accepted" {
-		Error(EInvalidPassword, c.Passwd)
+		logger.Error(EInvalidPassword, c.Passwd)
 		return fmt.Errorf(EInvalidPassword, c.Passwd)
 	}
 

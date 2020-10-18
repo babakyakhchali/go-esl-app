@@ -26,22 +26,22 @@ func (sc *SocketConnection) ExecuteHangup(uuid string, args string, sync bool) (
 }
 
 // BgApi - Helper designed to attach api in front of the command so that you do not need to write it
-func (sc *SocketConnection) Api(command string) error {
+func (sc *SocketConnection) Api(command string) (m *Message, err error) {
 	return sc.Send("api " + command)
 }
 
 // BgApi - Helper designed to attach bgapi in front of the command so that you do not need to write it
-func (sc *SocketConnection) BgApi(command string) error {
+func (sc *SocketConnection) BgApi(command string) (m *Message, err error) {
 	return sc.Send("bgapi " + command)
 }
 
 // Connect - Helper designed to help you handle connection. Each outbound server when handling needs to connect e.g. accept
 // connection in order for you to do answer, hangup or do whatever else you wish to do
-func (sc *SocketConnection) Connect() error {
+func (sc *SocketConnection) Connect() (m *Message, err error) {
 	return sc.Send("connect")
 }
 
 // Exit - Used to send exit signal to ESL. It will basically hangup call and close connection
-func (sc *SocketConnection) Exit() error {
+func (sc *SocketConnection) Exit() (m *Message, err error) {
 	return sc.Send("exit")
 }

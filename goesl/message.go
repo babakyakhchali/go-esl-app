@@ -17,6 +17,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	l "github.com/babakyakhchali/go-esl-wrapper/logger"
+)
+
+var (
+	msgLogger = l.NewLogger("message")
 )
 
 // Message - Freeswitch Message that is received by GoESL. Message struct is here to help with parsing message
@@ -25,8 +31,9 @@ type Message struct {
 	Headers map[string]string
 	Body    []byte
 
-	r  *bufio.Reader
-	tr *textproto.Reader
+	r       *bufio.Reader
+	tr      *textproto.Reader
+	msgType string
 }
 
 // String - Will return message representation as string
@@ -47,16 +54,16 @@ func (m *Message) GetHeader(key string) string {
 // Parse - Will parse out message received from Freeswitch and basically build it accordingly for later use.
 // However, in case of any issues func will return error.
 func (m *Message) Parse() error {
-
+	msgLogger.Debug("Parse() start")
 	cmr, err := m.tr.ReadMIMEHeader()
 
 	if err != nil && err.Error() != "EOF" {
-		Error(ECouldNotReadMIMEHeaders, err)
+		msgLogger.Error(ECouldNotReadMIMEHeaders, err)
 		return err
 	}
 
 	if cmr.Get("Content-Type") == "" {
-		Debug("Not accepting message because of empty content type. Just whatever with it ...")
+		msgLogger.Debug("Not accepting message because of empty content type. Just whatever with it ...")
 		return fmt.Errorf("Parse EOF")
 	}
 
@@ -66,28 +73,28 @@ func (m *Message) Parse() error {
 		l, err := strconv.Atoi(lv)
 
 		if err != nil {
-			Error(EInvalidContentLength, err)
+			msgLogger.Error(EInvalidContentLength, err)
 			return err
 		}
 
 		m.Body = make([]byte, l)
 
 		if _, err := io.ReadFull(m.r, m.Body); err != nil {
-			Error(ECouldNotReadyBody, err)
+			msgLogger.Error(ECouldNotReadyBody, err)
 			return err
 		}
 	}
 
-	msgType := cmr.Get("Content-Type")
+	m.msgType = cmr.Get("Content-Type")
 
-	Debug("Got message content (type: %s). Searching if we can handle it ...", msgType)
+	msgLogger.Debug("Got message content (type: %s). Searching if we can handle it ...", m.msgType)
 
-	if !StringInSlice(msgType, AvailableMessageTypes) {
-		return fmt.Errorf(EUnsupportedMessageType, msgType, AvailableMessageTypes)
+	if !StringInSlice(m.msgType, AvailableMessageTypes) {
+		return fmt.Errorf(EUnsupportedMessageType, m.msgType, AvailableMessageTypes)
 	}
 
 	// Assing message headers IF message is not type of event-json
-	if msgType != "text/event-json" {
+	if m.msgType != "text/event-json" {
 		for k, v := range cmr {
 
 			m.Headers[k] = v[0]
@@ -97,28 +104,29 @@ func (m *Message) Parse() error {
 				m.Headers[k], err = url.QueryUnescape(v[0])
 
 				if err != nil {
-					Error(ECouldNotDecode, err)
+					msgLogger.Error(ECouldNotDecode, err)
 					continue
 				}
 			}
 		}
+
 	}
 
-	switch msgType {
+	switch m.msgType {
 	case "text/disconnect-notice":
 		for k, v := range cmr {
-			Debug("Message (header: %s) -> (value: %v)", k, v)
+			msgLogger.Debug("Message (header: %s) -> (value: %v)", k, v)
 		}
 	case "command/reply":
 		reply := cmr.Get("Reply-Text")
 
 		if strings.Contains(reply, "-ERR") {
-			Debug("Message command/reply error %s", reply)
+			msgLogger.Debug("Message command/reply error %s", reply)
 			//return fmt.Errorf(EUnsuccessfulReply, reply[5:])
 		}
 	case "api/response":
 		if strings.Contains(string(m.Body), "-ERR") {
-			Debug("Message api/response error %s", string(m.Body)[5:])
+			msgLogger.Debug("Message api/response error %s", string(m.Body)[5:])
 			//return fmt.Errorf(EUnsuccessfulReply, string(m.Body)[5:])
 		}
 	case "text/event-json":
@@ -138,7 +146,7 @@ func (m *Message) Parse() error {
 				m.Headers[k] = v.(string)
 			default:
 				//delete(m.Headers, k)
-				Warning("Removed non-string property (%s)", k)
+				msgLogger.Warning("Removed non-string property (%s)", k)
 			}
 		}
 
@@ -148,6 +156,7 @@ func (m *Message) Parse() error {
 		} else {
 			m.Body = []byte("")
 		}
+		msgLogger.Debug("Parse() new event:%s", m.Headers["Event-Name"])
 
 	case "text/event-plain":
 		r := bufio.NewReader(bytes.NewReader(m.Body))
@@ -164,14 +173,14 @@ func (m *Message) Parse() error {
 			length, err := strconv.Atoi(vl)
 
 			if err != nil {
-				Error(EInvalidContentLength, err)
+				msgLogger.Error(EInvalidContentLength, err)
 				return err
 			}
 
 			m.Body = make([]byte, length)
 
 			if _, err = io.ReadFull(r, m.Body); err != nil {
-				Error(ECouldNotReadyBody, err)
+				msgLogger.Error(ECouldNotReadyBody, err)
 				return err
 			}
 		}

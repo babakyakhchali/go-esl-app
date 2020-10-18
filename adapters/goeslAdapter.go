@@ -10,9 +10,9 @@ type EslWrapper struct {
 	*goesl.Client
 }
 
-//ReadMessage wrapper
-func (c *EslWrapper) ReadMessage() (fs.IEvent, error) {
-	msg, err := c.Client.ReadMessage()
+//ReadEvent wrapper
+func (c *EslWrapper) ReadEvent() (fs.IEvent, error) {
+	msg, err := c.Client.ReadEvent()
 	return &MessageWrapper{Message: msg}, err
 }
 
@@ -29,5 +29,11 @@ func (m *MessageWrapper) GetBody() []byte {
 //SendMsg wrapper
 func (c *EslWrapper) SendMsg(cmd map[string]string, uuid string, data string) (fs.IEvent, error) {
 	msg, err := c.Client.SendMsg(cmd, uuid, data)
+	return &MessageWrapper{Message: msg}, err
+}
+
+//Send wrapper
+func (c *EslWrapper) Send(cmd string) (fs.IEvent, error) {
+	msg, err := c.Client.Send(cmd)
 	return &MessageWrapper{Message: msg}, err
 }
