@@ -7,52 +7,100 @@
 package logger
 
 import (
-	"log"
+	"fmt"
 )
 
-func Debug(message string, args ...interface{}) {
-	log.Printf(message, args...)
-}
+//logging colors
+const (
+	InfoColor    = "\033[1;34m%s\033[0m"
+	NoticeColor  = "\033[1;36m%s\033[0m"
+	WarningColor = "\033[1;33m%s\033[0m"
+	ErrorColor   = "\033[1;31m%s\033[0m"
+	DebugColor   = "\033[0;36m%s\033[0m"
+	PrintColor   = "\033[1;37m%s\033[0m"
+)
 
-func Error(message string, args ...interface{}) {
-	log.Printf(message, args...)
-}
+//different levels of logging
+const (
+	DEBUG = iota
+	INFO
+	NOTICE
+	WARNING
+	ERROR
+)
 
-func Notice(message string, args ...interface{}) {
-	log.Printf(message, args...)
-}
-
-func Info(message string, args ...interface{}) {
-	log.Printf(message, args...)
-}
-
-func Warning(message string, args ...interface{}) {
-	log.Printf(message, args...)
-}
-
+//NsLogger namespaced logger
 type NsLogger struct {
-	ns string
+	ns    string
+	level *int
 }
 
+//Debug print a debug log
 func (l *NsLogger) Debug(message string, args ...interface{}) {
-	Debug("["+l.ns+"] "+message, args...)
+	l.doLog(DEBUG, message, args...)
 }
 
+//Error print a error log
 func (l *NsLogger) Error(message string, args ...interface{}) {
-	Error("["+l.ns+"] "+message, args...)
+	l.doLog(ERROR, message, args...)
 }
 
+//Notice print a notice log
 func (l *NsLogger) Notice(message string, args ...interface{}) {
-	Notice("["+l.ns+"] "+message, args...)
+	l.doLog(NOTICE, message, args...)
 }
 
+//Info print a info log
 func (l *NsLogger) Info(message string, args ...interface{}) {
-	Info("["+l.ns+"] "+message, args...)
-}
-func (l *NsLogger) Warning(message string, args ...interface{}) {
-	Warning("["+l.ns+"] "+message, args...)
+	l.doLog(INFO, message, args...)
 }
 
+//Warning print a warning log
+func (l *NsLogger) Warning(message string, args ...interface{}) {
+	l.doLog(WARNING, message, args...)
+}
+
+func (l *NsLogger) doLog(level int, message string, args ...interface{}) {
+	lstr := ""
+	if *l.level > level {
+		return
+	}
+	switch level {
+	case DEBUG:
+		lstr = fmt.Sprintf(DebugColor, "[DEBUG]")
+	case INFO:
+		lstr = fmt.Sprintf(InfoColor, "[INFO]")
+	case NOTICE:
+		lstr = fmt.Sprintf(NoticeColor, "[NOTICE]")
+	case WARNING:
+		lstr = fmt.Sprintf(WarningColor, "[WARNING]")
+	case ERROR:
+		lstr = fmt.Sprintf(ErrorColor, "[ERROR]")
+	default:
+		lstr = fmt.Sprintf(PrintColor, "[CONSOLE]")
+	}
+	fmt.Printf(lstr+" "+l.ns+" "+message+"\n", args...)
+}
+
+//CreateChild create a child logger
+func (l *NsLogger) CreateChild(ns string) *NsLogger {
+	nl := NewLogger(ns)
+	nl.level = l.level
+	nl.ns = l.ns + " [" + ns + "]"
+	return nl
+}
+
+//SetLevel set log level for this and all child loggers
+func (l *NsLogger) SetLevel(level int) {
+	*l.level = level
+}
+
+//NewLogger create a parent logger
 func NewLogger(ns string) *NsLogger {
-	return &NsLogger{ns: ns}
+	l := NsLogger{
+		ns:    "[" + ns + "]",
+		level: new(int),
+	}
+	*l.level = DEBUG
+	return &l
 }

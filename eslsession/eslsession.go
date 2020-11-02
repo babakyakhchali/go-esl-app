@@ -16,6 +16,11 @@ var (
 	sessionLogger = l.NewLogger("eslsession")
 )
 
+//SetLogLevel set loglevel for eslsession logger
+func SetLogLevel(l int) {
+	sessionLogger.SetLevel(l)
+}
+
 //Session main object to interact with a call
 type Session struct {
 	FsConnector
@@ -187,11 +192,13 @@ func (fs *FsConnector) exec(app string, args string) (fs.IEvent, error) {
 		ename := event.GetHeader("Event-Name")
 		fs.logger.Debug("exec(%s,%s)(%s) got %s", app, args, fs.currentAppUUID, ename)
 		if event.GetHeader("Event-Name") == "CHANNEL_DESTROY" {
+			fs.closed = true
 			return event, fmt.Errorf("ChannelDestroyed")
 		}
 		return event, nil
 	case err := <-fs.appError:
 		fs.logger.Debug("exec(%s,%s)(%s) error: %s", app, args, fs.currentAppUUID, err)
+		//TODO: should fs.closed set to true here?
 		return nil, err
 	}
 }
@@ -224,7 +231,7 @@ func eslSessionHandler(msg fs.IEvent, esl fs.IEsl, f AppFactory) {
 			EventHandlers: make(map[string]fs.FsEventHandlerFunc),
 		},
 	}
-	s.logger = l.NewLogger("eslsession:" + msg.GetHeader("Unique-ID"))
+	s.logger = sessionLogger.CreateChild(msg.GetHeader("Unique-ID"))
 	sessions[s.uuid] = &s
 	app := f(&s)
 	if !app.IsApplicable((msg)) {
@@ -248,7 +255,7 @@ func eslSessionHandler(msg fs.IEvent, esl fs.IEsl, f AppFactory) {
 //the app created by factory in a new go routine
 func EslConnectionHandler(client fs.IEsl, factory AppFactory) {
 
-	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY CHANNEL_ANSWER")
+	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_UNBRIDGE")
 	for {
 		sessionLogger.Debug("Ready for event")
 		msg, err := client.ReadEvent()

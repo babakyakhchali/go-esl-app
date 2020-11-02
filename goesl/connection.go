@@ -16,12 +16,10 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	l "github.com/babakyakhchali/go-esl-wrapper/logger"
 )
 
 var (
-	connectionLogger = l.NewLogger("connection")
+	connectionLogger = goeslLogger.CreateChild("connection")
 )
 
 // SocketConnection Main connection against ESL - Gotta add more description here

@@ -85,6 +85,7 @@ func appFactory(s fs.ISession) eslession.IEslApp {
 }
 
 func main() {
+	goesl.SetLogLevel(l.ERROR)
 	client, err := goesl.NewClient("127.0.0.1", 8021, "ClueCon", 3)
 	w := &adapters.EslWrapper{Client: client}
 

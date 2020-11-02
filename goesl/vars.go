@@ -6,12 +6,23 @@
 
 package goesl
 
+import (
+	l "github.com/babakyakhchali/go-esl-wrapper/logger"
+)
+
 var (
 
-	// Size of buffer when we read from connection.
+	//ReadBufferSize  Size of buffer when we read from connection.
 	// 1024 << 6 == 65536
 	ReadBufferSize = 1024 << 6
 
-	// Freeswitch events that we can handle (have logic for it)
+	//AvailableMessageTypes  Freeswitch events that we can handle (have logic for it)
 	AvailableMessageTypes = []string{"auth/request", "text/disconnect-notice", "text/event-json", "text/event-plain", "api/response", "command/reply"}
 )
+
+var goeslLogger = l.NewLogger("goesl")
+
+//SetLogLevel set loglevel for eslsession logger
+func SetLogLevel(l int) {
+	goeslLogger.SetLevel(l)
+}

@@ -13,12 +13,10 @@ import (
 	"net"
 	"strconv"
 	"time"
-
-	l "github.com/babakyakhchali/go-esl-wrapper/logger"
 )
 
 var (
-	logger = l.NewLogger("client")
+	logger = goeslLogger.CreateChild("client")
 )
 
 // Client - In case you need to do inbound dialing against freeswitch server in order to originate call or see

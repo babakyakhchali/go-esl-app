@@ -17,12 +17,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	l "github.com/babakyakhchali/go-esl-wrapper/logger"
 )
 
 var (
-	msgLogger = l.NewLogger("message")
+	msgLogger = goeslLogger.CreateChild("message")
 )
 
 // Message - Freeswitch Message that is received by GoESL. Message struct is here to help with parsing message

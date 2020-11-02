@@ -12,12 +12,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
-	l "github.com/babakyakhchali/go-esl-wrapper/logger"
 )
 
 var (
-	serverLogger = l.NewLogger("message")
+	serverLogger = goeslLogger.CreateChild("server")
 )
 
 // OutboundServer - In case you need to start server, this Struct have it covered
