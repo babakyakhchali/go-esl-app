@@ -258,7 +258,7 @@ func EslConnectionHandler(client fs.IEsl, factory AppFactory) {
 	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_UNBRIDGE")
 	for {
 		sessionLogger.Debug("Ready for event")
-		msg, err := client.ReadEvent()
+		msg, err := client.ReadMessage()
 		if err != nil {
 			sessionLogger.Error("Error %s", err)
 			// If it contains EOF, we really dont care...

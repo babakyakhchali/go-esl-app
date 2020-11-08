@@ -8,9 +8,9 @@ type IEvent interface {
 
 //IEsl common interface for freeswitch esl
 type IEsl interface {
-	Send(cmd string) (IEvent, error)
+	Send(cmd string) error
 	SendMsg(cmd map[string]string, uuid string, data string) (IEvent, error)
-	ReadEvent() (IEvent, error)
+	ReadMessage() (IEvent, error)
 }
 
 // FsEventHandlerFunc a function to receive an event

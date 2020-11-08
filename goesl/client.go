@@ -38,12 +38,9 @@ func (c *Client) EstablishConnection() error {
 	}
 
 	c.SocketConnection = SocketConnection{
-		Conn:       conn,
-		eventError: make(chan error),
-		events:     make(chan *Message),
-
-		replyError: make(chan error),
-		replies:    make(chan *Message),
+		Conn: conn,
+		err:  make(chan error),
+		m:    make(chan *Message),
 	}
 
 	return nil

@@ -25,13 +25,9 @@ var (
 // SocketConnection Main connection against ESL - Gotta add more description here
 type SocketConnection struct {
 	net.Conn
-	//err chan error
-	//m       chan *Message
-	events     chan *Message
-	eventError chan error
-	replies    chan *Message
-	replyError chan error
-	mtx        sync.Mutex
+	err chan error
+	m   chan *Message
+	mtx sync.Mutex
 }
 
 // Dial - Will establish timedout dial against specified address. In this case, it will be freeswitch server
@@ -40,10 +36,10 @@ func (c *SocketConnection) Dial(network string, addr string, timeout time.Durati
 }
 
 // Send - Will send raw message to open net connection
-func (c *SocketConnection) Send(cmd string) (*Message, error) {
+func (c *SocketConnection) Send(cmd string) error {
 
 	if strings.Contains(cmd, "\r\n") {
-		return nil, fmt.Errorf(EInvalidCommandProvided, cmd)
+		return fmt.Errorf(EInvalidCommandProvided, cmd)
 	}
 
 	// lock mutex
@@ -52,39 +48,30 @@ func (c *SocketConnection) Send(cmd string) (*Message, error) {
 
 	_, err := io.WriteString(c, cmd)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	_, err = io.WriteString(c, "\r\n\r\n")
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	select {
-	case err := <-c.replyError:
-		return nil, err
-	case m := <-c.replies:
-		return m, nil
-	}
-
+	return nil
 }
 
 // SendMany - Will loop against passed commands and return 1st error if error happens
-func (c *SocketConnection) SendMany(cmds []string) (*Message, error) {
-	var msg *Message
+func (c *SocketConnection) SendMany(cmds []string) error {
 	for _, cmd := range cmds {
-		if msg, err := c.Send(cmd); err != nil {
-			return msg, err
+		if err := c.Send(cmd); err != nil {
+			return err
 		}
 	}
-
-	return msg, nil
+	return nil
 }
 
 // SendEvent - Will loop against passed event headers
-func (c *SocketConnection) SendEvent(eventHeaders []string) (*Message, error) {
+func (c *SocketConnection) SendEvent(eventHeaders []string) error {
 	if len(eventHeaders) <= 0 {
-		return nil, fmt.Errorf(ECouldNotSendEvent, len(eventHeaders))
+		return fmt.Errorf(ECouldNotSendEvent, len(eventHeaders))
 	}
 
 	// lock mutex to prevent event headers from conflicting
@@ -93,33 +80,27 @@ func (c *SocketConnection) SendEvent(eventHeaders []string) (*Message, error) {
 
 	_, err := io.WriteString(c, "sendevent ")
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	for _, eventHeader := range eventHeaders {
 		_, err := io.WriteString(c, eventHeader)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		_, err = io.WriteString(c, "\r\n")
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 	}
 
 	_, err = io.WriteString(c, "\r\n")
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	select {
-	case err := <-c.replyError:
-		return nil, err
-	case m := <-c.replies:
-		return m, nil
-	}
+	return nil
 }
 
 // Execute - Helper fuck to execute commands with its args and sync/async mode
@@ -187,11 +168,9 @@ func (c *SocketConnection) SendMsg(msg map[string]string, uuid, data string) (m 
 	c.mtx.Unlock()
 
 	select {
-	case err := <-c.replyError:
-		connectionLogger.Debug("SendMsg %s error %s", uuid, err)
+	case err := <-c.err:
 		return nil, err
-	case m := <-c.replies:
-		connectionLogger.Debug("SendMsg %s result %v", uuid, m)
+	case m := <-c.m:
 		return m, nil
 	}
 }
@@ -202,15 +181,15 @@ func (c *SocketConnection) OriginatorAddr() net.Addr {
 	return c.RemoteAddr()
 }
 
-// ReadEvent - Will read event message from channels and return them back accordingy.
+// ReadMessage - Will read event message from channels and return them back accordingy.
 // If error is received, error will be returned. If not, message will be returned back!
-func (c *SocketConnection) ReadEvent() (*Message, error) {
+func (c *SocketConnection) ReadMessage() (*Message, error) {
 	connectionLogger.Debug("Waiting for connection message to be received ...")
 
 	select {
-	case err := <-c.eventError:
+	case err := <-c.err:
 		return nil, err
-	case msg := <-c.events:
+	case msg := <-c.m:
 		return msg, nil
 	}
 }
@@ -225,25 +204,13 @@ func (c *SocketConnection) Handle() {
 	go func() {
 		for {
 			msg, err := newMessage(rbuf, true)
-			var msgChannel *chan *Message
-			var errChannel *chan error
-			connectionLogger.Debug("Handle() got message")
-			if msg.msgType == "text/event-plain" || msg.msgType == "text/event-json" {
-				msgChannel = &c.events
-				errChannel = &c.eventError
-			} else {
-				msgChannel = &c.replies
-				errChannel = &c.replyError
-			}
-
 			if err != nil {
-				connectionLogger.Debug("Handle() got error")
-				*errChannel <- err
+				c.err <- err
 				done <- true
 				break
 			}
 
-			*msgChannel <- msg
+			c.m <- msg
 			connectionLogger.Debug("Handle() passed message")
 		}
 	}()
