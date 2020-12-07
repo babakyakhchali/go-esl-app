@@ -1,2 +1,9 @@
 *.exe
 __debug_bin
+
+freeswitch/*
+!freeswitch/run.bat
+!freeswitch/conf
+freeswitch/conf/*
+!freeswitch/sounds
+!freeswitch/conf/freeswitch.xml

@@ -49,6 +49,11 @@ func (m *Message) GetHeader(key string) string {
 	return m.Headers[key]
 }
 
+// GetType - Will return message content type
+func (m *Message) GetType() string {
+	return m.msgType
+}
+
 // Parse - Will parse out message received from Freeswitch and basically build it accordingly for later use.
 // However, in case of any issues func will return error.
 func (m *Message) Parse() error {

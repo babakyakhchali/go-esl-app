@@ -25,9 +25,3 @@ type MessageWrapper struct {
 func (m *MessageWrapper) GetBody() []byte {
 	return m.Message.Body
 }
-
-//SendMsg wrapper
-func (c *EslWrapper) SendMsg(cmd map[string]string, uuid string, data string) (fs.IEvent, error) {
-	msg, err := c.Client.SendMsg(cmd, uuid, data)
-	return &MessageWrapper{Message: msg}, err
-}

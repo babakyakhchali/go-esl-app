@@ -35,6 +35,36 @@ func (c *SocketConnection) Dial(network string, addr string, timeout time.Durati
 	return net.DialTimeout(network, addr, timeout)
 }
 
+// BgAPI - Will send raw message to open net connection
+func (c *SocketConnection) BgAPI(cmd string, uuid string) error {
+	cmd = "bgapi " + cmd
+	if strings.Contains(cmd, "\r\n") {
+		return fmt.Errorf(EInvalidCommandProvided, cmd)
+	}
+
+	// lock mutex
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	_, err := io.WriteString(c, cmd)
+	if err != nil {
+		return err
+	}
+
+	if uuid != "" {
+		_, err := io.WriteString(c, "\r\nJob-UUID: "+uuid)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = io.WriteString(c, "\r\n\r\n")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // Send - Will send raw message to open net connection
 func (c *SocketConnection) Send(cmd string) error {
 
@@ -104,7 +134,7 @@ func (c *SocketConnection) SendEvent(eventHeaders []string) error {
 }
 
 // Execute - Helper fuck to execute commands with its args and sync/async mode
-func (c *SocketConnection) Execute(command, args string, sync bool) (m *Message, err error) {
+func (c *SocketConnection) Execute(command, args string, sync bool) error {
 	return c.SendMsg(map[string]string{
 		"call-command":     "execute",
 		"execute-app-name": command,
@@ -114,7 +144,7 @@ func (c *SocketConnection) Execute(command, args string, sync bool) (m *Message,
 }
 
 // ExecuteUUID - Helper fuck to execute uuid specific commands with its args and sync/async mode
-func (c *SocketConnection) ExecuteUUID(uuid string, command string, args string, sync bool) (m *Message, err error) {
+func (c *SocketConnection) ExecuteUUID(uuid string, command string, args string, sync bool) error {
 	return c.SendMsg(map[string]string{
 		"call-command":     "execute",
 		"execute-app-name": command,
@@ -124,13 +154,13 @@ func (c *SocketConnection) ExecuteUUID(uuid string, command string, args string,
 }
 
 // SendMsg - Basically this func will send message to the opened connection
-func (c *SocketConnection) SendMsg(msg map[string]string, uuid, data string) (m *Message, err error) {
+func (c *SocketConnection) SendMsg(msg map[string]string, uuid, data string) error {
 	connectionLogger.Debug("SendMsg %s", uuid)
 	b := bytes.NewBufferString("sendmsg")
 
 	if uuid != "" {
 		if strings.Contains(uuid, "\r\n") {
-			return nil, fmt.Errorf(EInvalidCommandProvided, msg)
+			return fmt.Errorf(EInvalidCommandProvided, msg)
 		}
 
 		b.WriteString(" " + uuid)
@@ -140,12 +170,12 @@ func (c *SocketConnection) SendMsg(msg map[string]string, uuid, data string) (m 
 
 	for k, v := range msg {
 		if strings.Contains(k, "\r\n") {
-			return nil, fmt.Errorf(EInvalidCommandProvided, msg)
+			return fmt.Errorf(EInvalidCommandProvided, msg)
 		}
 
 		if v != "" {
 			if strings.Contains(v, "\r\n") {
-				return nil, fmt.Errorf(EInvalidCommandProvided, msg)
+				return fmt.Errorf(EInvalidCommandProvided, msg)
 			}
 
 			b.WriteString(fmt.Sprintf("%s: %s\n", k, v))
@@ -160,19 +190,13 @@ func (c *SocketConnection) SendMsg(msg map[string]string, uuid, data string) (m 
 
 	// lock mutex
 	c.mtx.Lock()
-	_, err = b.WriteTo(c)
+	_, err := b.WriteTo(c)
 	if err != nil {
 		c.mtx.Unlock()
-		return nil, err
+		return err
 	}
 	c.mtx.Unlock()
-
-	select {
-	case err := <-c.err:
-		return nil, err
-	case m := <-c.m:
-		return m, nil
-	}
+	return nil
 }
 
 // OriginatorAddr - Will return originator address known as net.RemoteAddr()

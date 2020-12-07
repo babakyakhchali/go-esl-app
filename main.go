@@ -26,7 +26,7 @@ func (app *MyApp) SetParkData(event fs.IEvent) {
 }
 
 func (app *MyApp) IsApplicable(event fs.IEvent) bool {
-	return event.GetHeader("variable_chakavak_manage") != ""
+	return event.GetHeader("variable_esl_manage") != ""
 }
 
 //Run2 is called to control a channel like freeswitch xml extension does
@@ -49,28 +49,38 @@ func prettyPrint(o interface{}) {
 
 func (app *MyApp) answerHandler(event fs.IEvent) {
 	fmt.Printf("Gooot answer!!! %s", app.data.GetHeader("Unique-ID"))
-	prettyPrint(event)
+	//prettyPrint(event)
+	r, e := app.session.ExecBgAPI("sched_hangup +7 " + app.data.GetHeader("Unique-ID") + " ALLOTTED_TIMEOUT")
+	if e != nil {
+		fmt.Printf("scheduling error:%s", e)
+	} else {
+		prettyPrint(r)
+	}
+
 }
 
 //Run is called to control a channel like freeswitch xml extension does
 func (app *MyApp) Run() {
-	app.session.AddEventHandler("CHANNEL_ANSWER", app.answerHandler)
-	app.session.PreAnswer()
-	/*
-			esl_session.setvar("hangup_after_bridge", "true")
-		    esl_session.setvar("continue_on_fail", "true")
-		    esl_session.setvar("call_timeout", "20")
-		    esl_session.setvar("effective_caller_id_number", route_caller_id)*/
-	// vars := map[string]string{
-	// 	"hangup_after_bridge":        "false",
-	// 	"continue_on_fail":           "true",
-	// 	"call_timeout":               "20",
-	// 	"effective_caller_id_number": "hoooooa",
-	// }
-	// app.session.MultiSet(vars)
+	//app.session.AddEventHandler("CHANNEL_ANSWER", app.answerHandler)
+	app.session.Answer()
+
+	app.session.Set("hangup_after_bridge", "true")
+	app.session.Set("continue_on_fail", "true")
+	app.session.Set("call_timeout", "20")
+
+	vars := map[string]string{
+		"go_ession_var1": "false",
+		"go_ession_var2": "true",
+		"go_ession_var3": "20",
+		"go_ession_var4": "hoooooa",
+	}
+	app.session.MultiSet(vars)
+	app.session.Playback("ivr-asterisk_like_syphilis.wav")
 	username := app.data.GetHeader("Caller-Destination-Number")
-	r, _ := app.session.Bridge("user/" + username)
-	if failCause := r.GetHeader("variable_originate_failed_cause"); failCause != "" {
+	r, err := app.session.Bridge("user/" + username + "@" + app.data.GetHeader("variable_domain_name"))
+	if err != nil {
+		fmt.Printf("bridge error:%s", err)
+	} else if failCause := r.GetHeader("variable_originate_failed_cause"); failCause != "" {
 		fmt.Printf("call failed with cause:%s", failCause)
 		r, _ = app.session.Voicemail("default", "$${domain}", username)
 	}
