@@ -1,0 +1,20 @@
+[KRECV EVENT
+Event-Name: BACKGROUND_JOB
+Core-UUID: 01a42574-82bb-4cc3-b14f-00753d4d057b
+FreeSWITCH-Hostname: DESKTOP-UIUOE0N
+FreeSWITCH-Switchname: DESKTOP-UIUOE0N
+FreeSWITCH-IPv4: 192.168.1.6
+FreeSWITCH-IPv6: fe80::9db4:a1d4:31ef:e71f%
+Event-Date-Local: 2020-11-22 18:15:14
+Event-Date-GMT: Sun, 22 Nov 2020 14:45:14 GMT
+Event-Date-Timestamp: 1606056314044753
+Event-Calling-File: mod_event_socket.c
+Event-Calling-Function: api_exec
+Event-Calling-Line-Number: 1562
+Event-Sequence: 681
+Job-UUID: b4e0ec98-ebc1-4441-bd4a-d4c17dd98b8a
+Job-Command: kir
+Content-Length: 28
+Content-Length: 28
+
+-ERR kir Command not found!
