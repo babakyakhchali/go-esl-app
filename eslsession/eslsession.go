@@ -2,6 +2,7 @@ package eslsession
 
 import (
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -168,6 +169,11 @@ var (
 	EChannelClosed = "ChannelHangup"
 )
 
+func (fs *FsConnector) close() {
+	fs.closed = true
+	close(fs.cmds)
+}
+
 //sits between event channel and session and receives all events and replies for the session
 func (fs *FsConnector) dispatch() {
 	for {
@@ -183,11 +189,13 @@ func (fs *FsConnector) dispatch() {
 				}
 			}
 			if ename == "CHANNEL_DESTROY" {
-				fs.closed = true
+				fs.close()
 				select { //this must be nonblocking
 				case fs.execError <- fmt.Errorf(EChannelClosed):
 				default:
 				}
+				fs.logger.Debug("dispatch(): ended by CHANNEL_DESTROY")
+				return
 			}
 			if h, e := fs.EventHandlers[ename]; e {
 				go h(event)
@@ -201,6 +209,9 @@ func (fs *FsConnector) dispatch() {
 			case fs.jobError <- err:
 			default:
 			}
+			fs.close()
+			fs.logger.Debug("dispatch(): ended by error:", err)
+			return
 
 		}
 	}
@@ -330,13 +341,19 @@ func eslSessionHandler(msg fs.IEvent, esl fs.IEsl, f AppFactory) {
 	s.logger.Info("session ended:%s", s.uuid)
 }
 
+func getMemStats() string {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return fmt.Sprintf("Alloc:%d bytes HeapAlloc:%d bytes", m.Alloc, m.HeapAlloc)
+}
+
 //EslConnectionHandler listens for channel events. On receiving a park event creates a Session and runs
 //the app created by factory in a new go routine
 func EslConnectionHandler(client fs.IEsl, factory AppFactory) {
 
-	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_UNBRIDGE BACKGROUND_JOB")
+	client.Send("events json HEARTBEAT CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_UNBRIDGE BACKGROUND_JOB")
 	for {
-		sessionLogger.Debug("Ready for event")
+		sessionLogger.Debug("Ready for event status: %d routines, %s", runtime.NumGoroutine(), getMemStats())
 		msg, err := client.ReadMessage()
 		if err != nil {
 			sessionLogger.Error("Error %s", err)
@@ -360,13 +377,20 @@ func EslConnectionHandler(client fs.IEsl, factory AppFactory) {
 			}
 		}
 		if msg.GetType() != "text/event-json" {
-			sessionLogger.Debug("got %s: %s", msg.GetType(), msg.GetBody())
+			sessionLogger.Debug("got %s: reply:%s body:%s ", msg.GetType(), msg.GetHeader("Reply-Text"), msg.GetBody())
 		} else {
 			sessionLogger.Debug("got event:%s(%s) uuid:%s", eventName, eventSubclass, channelUUID)
 		}
 
 		if eventName == "CHANNEL_PARK" {
 			go eslSessionHandler(msg, client, factory)
+		} else if eventName == "HEARTBEAT" {
+			/*uncomment following lines to debug active goroutines
+			buf := make([]byte, 1<<16)
+			runtime.Stack(buf, true)
+			fmt.Printf("%s", buf)*/
+			sessionLogger.Debug("HEARTBEAT: cps:%s , %s", msg.GetHeader("Session-Per-Sec"), msg.GetHeader("Up-Time"))
+
 		} else if channelUUID != "" {
 			s, r := sessions[channelUUID]
 			if r {
@@ -384,5 +408,11 @@ func EslConnectionHandler(client fs.IEsl, factory AppFactory) {
 		}
 		//goesl.Debug("%v", msg)
 	}
+
+	/*uncomment following lines to debug active goroutines
+	buf := make([]byte, 1<<16)
+	runtime.Stack(buf, true)
+	fmt.Printf("%s", buf)*/
+
 	sessionLogger.Info("Application exitted")
 }

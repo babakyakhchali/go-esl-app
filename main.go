@@ -79,13 +79,14 @@ func (app *MyApp) Run() {
 	username := app.data.GetHeader("Caller-Destination-Number")
 	r, err := app.session.Bridge("user/" + username + "@" + app.data.GetHeader("variable_domain_name"))
 	if err != nil {
-		fmt.Printf("bridge error:%s", err)
+		fmt.Printf("bridge error:%s\n", err)
 	} else if failCause := r.GetHeader("variable_originate_failed_cause"); failCause != "" {
-		fmt.Printf("call failed with cause:%s", failCause)
+		fmt.Printf("call failed with cause:%s\n", failCause)
 		r, _ = app.session.Voicemail("default", "$${domain}", username)
 	}
 	//prettyPrint(r)
 	app.session.Hangup("NORMAL_CLEARING")
+	fmt.Printf("call end\n")
 }
 
 func appFactory(s fs.ISession) eslession.IEslApp {
