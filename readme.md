@@ -1,5 +1,5 @@
 ### About
-A session emulator over esl for controlling freeswitch channels using something like dialplan.
+A xml session emulator over esl for controlling freeswitch channels using something like dialplan.
 For example:
 ``` golang
 
@@ -14,12 +14,24 @@ import (
 
 //MyApp will act as freeswitch extension xml which wraps an esl session
 type MyApp struct {
-	session eslession.ISession
+	session fs.ISession
+	data    fs.IEvent
+}
+
+//SetParkData called on recieveing intial park
+func (app *MyApp) SetParkData(event fs.IEvent) {
+	app.data = event
+}
+
+//IsApplicable decides based on channels variables weather the channel should be managed by this app or not
+func (app *MyApp) IsApplicable(event fs.IEvent) bool {
+	return event.GetHeader("variable_esl_manage") != ""
 }
 
 //Run is called to control a channel like freeswitch xml extension does
+//every call to dialplan applications like Answer,Playback... returns an event or an error
 func (app *MyApp) Run() {
-	app.session.Answer()
+	app.session.Answer()	
 	app.session.Playback("conference\\8000\\conf-alone.wav")
 	i, e := app.session.PlayAndGetOneDigit("phrase:demo_ivr_sub_menu")
 	if e != nil {
@@ -48,7 +60,8 @@ func main() {
 	go client.Handle()
 
 	client.Send("events json CHANNEL_HANGUP CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE CHANNEL_PARK CHANNEL_DESTROY")
-	eslession.EslConnectionHandler(w, appFactory)
+	eslession.EslConnectionHandler(w, appFactory)	//creates instances of MyApp to controll channels
+													//appFactory is used on each initial channel park event to create a session instance
 	fmt.Printf("Application exitted")
 }
 
